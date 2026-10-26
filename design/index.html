@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>菜谱 App · 样式比样</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #fafafa; color: #1c1c1e;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  header { padding: 36px 0 20px; text-align: center; }
+  header h1 { margin: 0; font-size: 22px; letter-spacing: -.01em; }
+  header p { margin: 8px 0 0; font-size: 13px; color: #8e8e93; }
+  .grid {
+    display: flex; gap: 28px; justify-content: center; align-items: flex-start;
+    padding: 16px 24px 60px; overflow-x: auto;
+  }
+  .cell { flex: none; width: 375px; }
+  .cap { display: flex; align-items: baseline; gap: 8px; margin: 0 0 10px 2px; }
+  .cap b { font-size: 14px; font-weight: 600; }
+  .cap span { font-size: 12px; color: #9b9ba1; }
+  .phone {
+    width: 375px; height: 700px; overflow-y: auto; background: #fff;
+    border: 1px solid #e5e5e7; border-radius: 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.04), 0 12px 32px -12px rgba(0,0,0,.10);
+  }
+  .phone::-webkit-scrollbar { width: 0; }
+  .note { text-align: center; font-size: 12px; color: #a0a0a6; padding-bottom: 40px; }
+</style>
+<link rel="stylesheet" href="design.css">
+</head>
+<body>
+<header>
+  <h1>菜谱 App · 四个方向</h1>
+  <p>点任意一条可进入详情页 · 上下滚动查看完整列表 · 窄屏请左右滑动</p>
+</header>
+
+<div class="grid">
+  <div class="cell">
+    <div class="cap"><b>A</b><span>备忘录式 · 每行带材料摘要尾部尖角</span></div>
+    <div class="phone v-a" id="a"></div>
+  </div>
+  <div class="cell">
+    <div class="cap"><b>B</b><span>Things 式 · 圆点 + 下划线 tab</span></div>
+    <div class="phone v-b" id="b"></div>
+  </div>
+  <div class="cell">
+    <div class="cap"><b>C</b><span>索引式 · 编号 + 步数，无摘要</span></div>
+    <div class="phone v-c" id="c"></div>
+  </div>
+  <div class="cell">
+    <div class="cap"><b>D</b><span>极简文本 · 无搜索无分类，只有名字</span></div>
+    <div class="phone v-d" id="d"></div>
+  </div>
+</div>
+<p class="note">示例数据为 12 道常见家常菜，仅用于比样</p>
+
+<script src="data.js"></script>
+<script src="shell.js"></script>
+<script>
+  mountList({ root: document.getElementById('a'), variant: 'a', categories: true,  showSearch: true,  showSummary: true });
+  mountList({ root: document.getElementById('b'), variant: 'b', categories: true,  showSearch: true,  showSummary: true });
+  mountList({ root: document.getElementById('c'), variant: 'c', categories: true,  showSearch: true,  showSummary: false });
+  mountList({ root: document.getElementById('d'), variant: 'd', categories: false, showSearch: false, showSummary: false });
+</script>
+</body>
+</html>

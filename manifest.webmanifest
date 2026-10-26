@@ -1,0 +1,14 @@
+{
+  "name": "菜谱",
+  "short_name": "菜谱",
+  "description": "一个极简的个人菜谱本",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

@@ -1,0 +1,179 @@
+:root {
+  --ink: #1c1c1e;
+  --ink-2: #6b6b70;
+  --ink-3: #9b9ba1;
+  --line: #e8e8ea;
+  --bg: #fff;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; min-height: 100%; }
+body {
+  background: #fff;
+  color: var(--ink);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+  font-size: 16px;
+}
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+input, textarea { font: inherit; color: inherit; }
+input:focus, textarea:focus { outline: none; }
+
+#app {
+  width: 100%;
+  max-width: 460px;
+  margin: 0 auto;
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+}
+
+/* ---------- 列表头 ---------- */
+.top {
+  position: sticky; top: 0; z-index: 10;
+  background: rgba(255,255,255,.94);
+  backdrop-filter: saturate(180%) blur(14px);
+  -webkit-backdrop-filter: saturate(180%) blur(14px);
+}
+.top-inner {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: calc(18px + env(safe-area-inset-top)) 20px 18px;
+}
+.top h1 {
+  margin: 0;
+  font-size: 15px; font-weight: 600; letter-spacing: .16em;
+  color: var(--ink-2); text-transform: uppercase;
+}
+.top .acts { display: flex; gap: 16px; align-items: center; }
+.iconbtn {
+  width: 30px; height: 30px; display: grid; place-items: center;
+  color: var(--ink-3); transition: color .15s;
+  margin: -4px;
+}
+.iconbtn:hover, .iconbtn:active { color: var(--ink); }
+.iconbtn.add { font-size: 24px; font-weight: 300; line-height: 1; }
+
+/* ---------- 检索条（点图标才展开） ---------- */
+.find {
+  display: grid; grid-template-rows: 0fr; transition: grid-template-rows .22s cubic-bezier(.2,.7,.3,1);
+  padding: 0 20px;
+}
+.find.open { grid-template-rows: 1fr; }
+.find > div { overflow: hidden; }
+.find input {
+  width: 100%; background: none; border: 0; border-bottom: 1px solid var(--line);
+  padding: 4px 0 10px; font-size: 15px;
+}
+.find input::placeholder { color: #c4c4ca; }
+
+/* ---------- 列表 ---------- */
+.list { padding: 4px 20px 0; }
+.row {
+  display: flex; align-items: baseline; gap: 14px; width: 100%;
+  text-align: left; padding: 15px 0;
+  border-bottom: 1px solid var(--line);
+  animation: fadeUp .3s cubic-bezier(.2,.7,.3,1) both;
+}
+@keyframes fadeUp { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+.row .num {
+  flex: none; width: 20px;
+  font-size: 11px; color: #c0c0c6;
+  font-variant-numeric: tabular-nums;
+}
+.row .t {
+  font-size: 17px; font-weight: 500; letter-spacing: -.01em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.row .mini {
+  margin-left: auto; flex: none;
+  font-size: 11.5px; color: #c0c0c6;
+}
+.empty { padding: 60px 0; text-align: center; font-size: 14px; color: #b9b9bf; }
+
+/* ---------- 详情 ---------- */
+.detail { padding: 0 20px; animation: fadeUp .26s cubic-bezier(.2,.7,.3,1) both; }
+.bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: calc(14px + env(safe-area-inset-top)) 0 10px;
+  margin: 0 -20px; padding-left: 20px; padding-right: 20px;
+  position: sticky; top: 0; z-index: 10;
+  background: rgba(255,255,255,.94);
+  backdrop-filter: saturate(180%) blur(14px);
+  -webkit-backdrop-filter: saturate(180%) blur(14px);
+}
+.back {
+  display: inline-flex; align-items: center; gap: 2px;
+  font-size: 16px; color: var(--ink-2); margin-left: -4px;
+}
+.back .chev { font-size: 20px; line-height: 1; margin-top: -2px; }
+.detail h2 {
+  margin: 8px 0 6px;
+  font-size: 27px; line-height: 1.25; letter-spacing: -.02em; font-weight: 700;
+}
+.detail .meta { font-size: 12.5px; color: var(--ink-3); }
+.sec { margin-top: 32px; }
+.sec h3 {
+  margin: 0 0 12px;
+  font-size: 12px; font-weight: 600; letter-spacing: .14em;
+  color: var(--ink-3);
+}
+.ing { list-style: none; margin: 0; padding: 0; }
+.ing li { font-size: 15.5px; line-height: 1.85; color: #2a2a2e; }
+.steps { margin: 0; padding: 0; list-style: none; counter-reset: s; }
+.steps li {
+  counter-increment: s; position: relative; padding-left: 30px;
+  font-size: 15.5px; line-height: 1.75; color: #2a2a2e; margin-bottom: 16px;
+}
+.steps li::before {
+  content: counter(s); position: absolute; left: 0; top: 1px;
+  font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums;
+}
+.rule { height: 1px; background: var(--line); margin: 30px 0 0; }
+
+/* ---------- 编辑页 ---------- */
+.edit { padding: 0 20px; }
+.field { margin-top: 22px; }
+.field > label {
+  display: block; margin-bottom: 8px;
+  font-size: 12px; font-weight: 600; letter-spacing: .14em; color: var(--ink-3);
+}
+.field input.plain, .field textarea.plain {
+  width: 100%; border: 0; border-bottom: 1px solid var(--line);
+  background: none; padding: 6px 0 10px; font-size: 16px; resize: none;
+}
+.field input.big { font-size: 24px; font-weight: 700; letter-spacing: -.02em; }
+.field textarea.lines { line-height: 1.75; min-height: 120px; }
+.field .hint { margin-top: 8px; font-size: 12px; color: #b4b4ba; line-height: 1.6; }
+.save {
+  margin-top: 34px; width: 100%; padding: 14px;
+  border-radius: 10px; background: var(--ink); color: #fff;
+  font-size: 15.5px; font-weight: 500;
+  transition: opacity .15s;
+}
+.save:disabled { opacity: .35; }
+.danger { display: block; margin: 18px auto 0; font-size: 13.5px; color: #b4443a; }
+
+/* ---------- 设置 ---------- */
+.panel { padding: 0 20px; }
+.panel p.note { font-size: 13px; line-height: 1.75; color: var(--ink-2); margin: 0 0 20px; }
+.panel code {
+  font-family: var(--mono); font-size: 12px;
+  background: #f4f4f6; padding: 1px 5px; border-radius: 4px;
+}
+.panel .rowline { display: flex; justify-content: space-between; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+.panel .rowline span { font-size: 13px; color: var(--ink-3); }
+.ghost {
+  display: block; width: 100%; text-align: center;
+  border: 1px solid var(--line); border-radius: 10px;
+  padding: 12px; margin-top: 12px; font-size: 14.5px; color: var(--ink-2);
+}
+
+/* ---------- 轻提示 ---------- */
+.toast {
+  position: fixed; left: 50%; bottom: 32px; transform: translate(-50%, 8px);
+  z-index: 100; padding: 9px 16px; border-radius: 99px;
+  background: rgba(28,28,30,.9); color: #fff; font-size: 13px;
+  opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s;
+  max-width: 80vw; text-align: center;
+}
+.toast.on { opacity: 1; transform: translate(-50%, 0); }
