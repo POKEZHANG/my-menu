@@ -1,7 +1,11 @@
 -- ============================================================
--- 菜谱 · Supabase 建表
+-- 菜谱 · Supabase 建表（读写分离版）
 -- 在 Supabase 控制台 → SQL Editor 里整段粘贴执行。
--- 设计为「单人使用、匿名可读写」，不引入登录体系。
+--
+-- 权限设计：
+--   前端（anon key）  仅可 SELECT，页面能看、不能改
+--   密钥（secret key）可增删改，只存在于你电脑的系统环境变量里
+--                     绝不写进仓库，也不写进网页
 -- ============================================================
 
 create table if not exists public.dishes (
@@ -10,7 +14,7 @@ create table if not exists public.dishes (
   category    text,
   ingredients text[]      not null default '{}',  -- 每项一行纯文本，如 "番茄 2 个"
   steps       text[]      not null default '{}',  -- 每项一个步骤，不带序号
-  sort        integer     not null default 0,     -- 手动排序用，小的在前
+  sort        integer     not null default 0,     -- 排序用，小的在前
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );
@@ -30,39 +34,45 @@ drop trigger if exists dishes_touch on public.dishes;
 create trigger dishes_touch before update on public.dishes
   for each row execute function public.touch_updated_at();
 
--- 行级安全：开启但放开匿名读写（anon key 可见即可用）
+
+-- ---------------- 权限 ----------------
 alter table public.dishes enable row level security;
 
+-- 清掉旧版遗留的放开策略
 drop policy if exists "dishes_all_read"   on public.dishes;
-create policy "dishes_all_read"   on public.dishes for select using (true);
-
 drop policy if exists "dishes_all_insert" on public.dishes;
-create policy "dishes_all_insert" on public.dishes for insert with check (true);
-
 drop policy if exists "dishes_all_update" on public.dishes;
-create policy "dishes_all_update" on public.dishes for update using (true) with check (true);
-
 drop policy if exists "dishes_all_delete" on public.dishes;
-create policy "dishes_all_delete" on public.dishes for delete using (true);
+
+-- 只读：任何人都能查看
+drop policy if exists "dishes_public_read" on public.dishes;
+create policy "dishes_public_read" on public.dishes
+  for select using (true);
+
+-- 不建 insert / update / delete 策略。
+-- RLS 开启时「没有策略 = 一律拒绝」，所以 anon 与登录用户都无法写入。
+-- 写入走 secret key，它绕过 RLS，不需要策略。
+
+-- 收回 anon 的表级写权限（双保险，即使将来误加策略也写不进去）
+revoke insert, update, delete, truncate on public.dishes from anon;
+revoke insert, update, delete, truncate on public.dishes from authenticated;
+grant  select on public.dishes to anon, authenticated;
 
 
 -- ============================================================
--- 批量导入模板
--- 结构固定为三列：菜名 / 材料 / 步骤。
--- 材料、步骤是数组，元素之间用 "~" 分隔（不用逗号，避免和材料里的逗号打架）。
--- 复制下面这段，把内容换成你的菜谱即可。
+-- 批量导入示例
+-- 这份 SQL 由 tools/push-dishes.js 执行时自动生成，一般不用手写。
+-- 手写时注意：字符串用单引号，内部的单引号写成两个。
 -- ============================================================
 
 -- insert into public.dishes (title, category, ingredients, steps) values
 --   ('番茄炒蛋', '家常菜',
---    array['番茄 2 个', '鸡蛋 3 个', '小葱 1 根', '盐 适量', '糖 半勺', '食用油 2 勺'],
+--    array['番茄 2 个', '鸡蛋 3 个', '小葱 1 根', '盐 适量'],
 --    array['番茄顶部划十字，开水烫 30 秒后去皮，切块',
 --          '鸡蛋打散加少许盐，热锅冷油倒入，凝固后盛出',
 --          '原锅下番茄，中火炒出汁，加糖和盐',
---          '倒回鸡蛋翻炒均匀，撒葱花出锅']),
---   ('可乐鸡翅', '家常菜',
---    array['鸡中翅 10 个', '可乐 330ml', '姜 3 片', '生抽 2 勺', '老抽 半勺', '料酒 1 勺'],
---    array['鸡翅两面划刀，冷水下锅焯 3 分钟',
---          '锅中少油，鸡翅两面煎至金黄',
---          '倒入生抽老抽翻匀，再倒可乐没过鸡翅',
---          '中小火 15 分钟后大火收汁']);
+--          '倒回鸡蛋翻炒均匀，撒葱花出锅'])
+-- on conflict (title) do update set
+--   category    = excluded.category,
+--   ingredients = excluded.ingredients,
+--   steps       = excluded.steps;

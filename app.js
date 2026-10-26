@@ -56,7 +56,9 @@
     } catch {}
   }
 
-  // ---------- 云端 ----------
+  // ---------- 云端（只读） ----------
+  // 前端只用 anon key，数据库中只授予 SELECT。
+  // 新增 / 修改 / 删除一律走本机的 tools/push-dishes.js。
   async function cloudGet() {
     if (!CLOUD) return null;
     try {
@@ -68,52 +70,6 @@
     }
   }
 
-  async function cloudUpsert(dish) {
-    if (!CLOUD) return true;
-    const payload = {
-      title: dish.title,
-      category: dish.category || null,
-      ingredients: dish.ingredients,
-      steps: dish.steps,
-      sort: dish.sort || 0,
-      updated_at: new Date().toISOString(),
-    };
-    if (dish.remoteId) payload.id = dish.remoteId;
-    try {
-      const r = await fetch(`${BASE}/rest/v1/${TABLE}`, {
-        method: "POST",
-        headers: { ...HEAD, Prefer: "return=representation,resolution=merge-duplicates" },
-        body: JSON.stringify(payload),
-      });
-      if (!r.ok) throw new Error(r.status);
-      const out = await r.json();
-      if (!dish.remoteId && out[0]?.id) {
-        dish.remoteId = out[0].id;
-        writeLocal();
-      }
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  async function cloudDelete(dish) {
-    if (!CLOUD || !dish.remoteId) return true;
-    try {
-      const r = await fetch(`${BASE}/rest/v1/${TABLE}?id=eq.${dish.remoteId}`, { method: "DELETE", headers: HEAD });
-      return r.ok;
-    } catch {
-      return false;
-    }
-  }
-
-  // 本地新增的记录补传云端
-  async function pushPending() {
-    if (!CLOUD) return;
-    const pending = dishes.filter((d) => !d.remoteId);
-    for (const d of pending) await cloudUpsert(d);
-  }
-
   async function load() {
     const local = readLocal();
     if (local.length) {
@@ -123,7 +79,7 @@
     if (CLOUD) {
       const remote = await cloudGet();
       if (remote) {
-        const mapped = remote.map((r) => ({
+        dishes = remote.map((r) => ({
           id: `r${r.id}`,
           remoteId: r.id,
           title: r.title || "",
@@ -133,35 +89,25 @@
           sort: r.sort || 0,
           updatedAt: r.updated_at || "",
         }));
-        // 云端为准；本地未上传的（无 remoteId）保留并补传
-        const keep = dishes.filter((d) => !d.remoteId);
-        dishes = [...mapped, ...keep];
         writeLocal();
-        render();
-        pushPending();
-      } else if (!local.length) {
-        render();
       }
-    } else if (!local.length) {
-      render();
     }
+    render();
   }
 
-  // ---------- 增删改 ----------
+  // ---------- 增删改（只写本机） ----------
   function uid() {
     return "l" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   }
 
-  async function saveDish(data, id) {
+  function saveDish(data, id) {
     if (id) {
       const d = dishes.find((x) => x.id === id);
       if (!d) return;
       Object.assign(d, data, { updatedAt: new Date().toISOString() });
-      writeLocal();
-      toast("已保存");
-      if (CLOUD && !(await cloudUpsert(d))) toast("已存本地，云端同步稍后重试");
+      toast("已保存（仅本机）");
     } else {
-      const d = {
+      dishes.push({
         id: uid(),
         remoteId: null,
         title: data.title,
@@ -170,24 +116,21 @@
         steps: data.steps,
         sort: dishes.length,
         updatedAt: new Date().toISOString(),
-      };
-      dishes.push(d);
-      writeLocal();
-      toast(CLOUD ? "已添加" : "已添加（仅本机）");
-      cloudUpsert(d);
+      });
+      toast("已添加（仅本机）");
     }
+    writeLocal();
     view = "list";
     current = null;
     render();
   }
 
-  async function deleteDish(id) {
+  function deleteDish(id) {
     const d = dishes.find((x) => x.id === id);
     if (!d) return;
     if (!confirm(`删除「${d.title}」？此操作无法撤销。`)) return;
     dishes = dishes.filter((x) => x.id !== id);
     writeLocal();
-    await cloudDelete(d);
     toast("已删除");
     view = "list";
     current = null;
@@ -235,7 +178,7 @@
             <button class="iconbtn" data-act="settings" aria-label="设置">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3 15a1.6 1.6 0 0 0-1.5-1H1.4a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 3 9a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 7 4.6h.1A1.6 1.6 0 0 0 8 3V2.9a2 2 0 1 1 4 0V3a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1A1.6 1.6 0 0 0 19.4 9v.1a1.6 1.6 0 0 0 1.5 1h.2a2 2 0 1 1 0 4h-.2a1.6 1.6 0 0 0-1.5 1z"/></svg>
             </button>
-            <button class="iconbtn add" data-act="add" aria-label="添加">+</button>
+            ${CLOUD ? "" : '<button class="iconbtn add" data-act="add" aria-label="添加">+</button>'}
           </div>
         </div>
         <div class="find ${findOpen ? "open" : ""}"><div><input id="q" placeholder="搜索菜名、材料" value="${esc(query)}"></div></div>
@@ -254,7 +197,7 @@
       render();
       if (findOpen) app.querySelector("#q")?.focus();
     });
-    app.querySelector('[data-act="add"]').addEventListener("click", () => {
+    app.querySelector('[data-act="add"]')?.addEventListener("click", () => {
       current = null;
       view = "edit";
       render();
@@ -300,14 +243,11 @@
       <div class="detail">
         <div class="bar">
           <button class="back" data-act="back"><span class="chev">‹</span>菜谱</button>
-          <span style="display:flex;gap:16px">
-            <button class="iconbtn" data-act="edit" aria-label="编辑">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
-            </button>
-          </span>
+          ${CLOUD ? "" : `<button class="back" data-act="edit" style="margin-left:auto;margin-right:0;color:var(--ink)">编辑</button>`}
         </div>
         <h2>${esc(d.title)}</h2>
         <div class="meta">${[d.category, `${d.ingredients.length} 种材料`, `${d.steps.length} 步`].filter(Boolean).join(" · ")}</div>
+        ${CLOUD && !d.remoteId ? '<div class="meta" style="margin-top:6px;color:#b98a5a">这道菜还在本机，尚未上传到云端</div>' : ""}
         <div class="sec">
           <h3>材料</h3>
           <ul class="ing">${d.ingredients.map((i) => `<li>${esc(i)}</li>`).join("") || '<li style="color:#b9b9bf">未填写</li>'}</ul>
@@ -323,7 +263,7 @@
       current = null;
       render();
     });
-    app.querySelector('[data-act="edit"]').addEventListener("click", () => {
+    app.querySelector('[data-act="edit"]')?.addEventListener("click", () => {
       view = "edit";
       render();
     });
@@ -395,7 +335,7 @@
   // ---------- 渲染：设置 ----------
   function renderSettings() {
     const n = dishes.length;
-    const pendingN = dishes.filter((d) => !d.remoteId).length;
+    const localN = dishes.filter((d) => !d.remoteId).length;
     app.innerHTML = `
       <div class="panel">
         <div class="bar">
@@ -403,25 +343,20 @@
         </div>
         <p class="note">
           ${CLOUD
-            ? "已连接云端，改动会自动同步。"
-            : `当前为纯本地模式：数据只存在这台设备的浏览器里，换设备或清缓存会丢失。要开启云端，在 <code>config.js</code> 里填上 Supabase 的地址和 anon key。`}
+            ? "菜谱从云端读取，页面为只读。新增或修改请在你电脑上用 <code>tools/push-dishes.js</code> 上传。"
+            : "当前未连接云端：数据只存在这台设备的浏览器里，换设备或清缓存会丢失。在 <code>config.js</code> 填上 Supabase 地址和 anon key 即可打开云端菜谱。"}
         </p>
         <div class="rowline"><b>菜谱</b><span>${n} 道</span></div>
-        <div class="rowline"><b>存储</b><span>${CLOUD ? "云端 + 本机缓存" : "仅本机"}</span></div>
-        ${CLOUD ? `<div class="rowline"><b>待上传</b><span>${pendingN} 道</span></div>` : ""}
-        ${CLOUD && pendingN ? '<button class="ghost" data-act="push">立即上传</button>' : ""}
+        <div class="rowline"><b>来源</b><span>${CLOUD ? "云端同步" : "仅本机"}</span></div>
+        ${localN ? `<div class="rowline"><b>仅本机</b><span>${localN} 道</span></div>` : ""}
         <button class="ghost" data-act="export">导出备份（JSON）</button>
         <button class="ghost" data-act="import">导入备份（JSON）</button>
         <input type="file" id="f-file" accept="application/json,.json" hidden>
+        ${localN ? '<button class="ghost" data-act="reset" style="color:#b4443a">清除本机临时数据</button>' : ""}
       </div>`;
 
     app.querySelector('[data-act="back"]').addEventListener("click", () => {
       view = "list";
-      render();
-    });
-    app.querySelector('[data-act="push"]')?.addEventListener("click", async () => {
-      await pushPending();
-      toast("已尝试上传");
       render();
     });
     app.querySelector('[data-act="export"]').addEventListener("click", () => {
@@ -444,7 +379,7 @@
         for (const r of list) {
           if (!r?.title) continue;
           if (dishes.some((x) => x.title === r.title)) continue;
-          const d = {
+          dishes.push({
             id: uid(),
             remoteId: null,
             title: r.title,
@@ -453,17 +388,22 @@
             steps: Array.isArray(r.steps) ? r.steps : [],
             sort: dishes.length,
             updatedAt: new Date().toISOString(),
-          };
-          dishes.push(d);
+          });
           added++;
-          if (CLOUD) cloudUpsert(d);
         }
         writeLocal();
-        toast(`导入 ${added} 道`);
+        toast(`导入 ${added} 道（仅本机）`);
         render();
       } catch {
         toast("文件格式不对");
       }
+    });
+    app.querySelector('[data-act="reset"]')?.addEventListener("click", () => {
+      if (!confirm("清除本机临时数据？云端菜谱不受影响，下次打开会重新拉取。")) return;
+      dishes = dishes.filter((d) => d.remoteId);
+      writeLocal();
+      toast("已清除");
+      render();
     });
   }
 
