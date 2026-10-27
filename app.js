@@ -24,6 +24,7 @@
   let current = null;     // 当前菜谱 id
   let query = "";
   let findOpen = false;
+  let catFilter = "";     // "" = 全部；"__none__" = 未分类；其余为分类名
 
   // ---------- 工具 ----------
   const esc = (s) =>
@@ -138,11 +139,21 @@
   }
 
   // ---------- 渲染：列表 ----------
+  function catsOf() {
+    const set = new Set(dishes.map((d) => (d.category || "").trim()));
+    return {
+      named: [...set].filter(Boolean).sort((a, b) => a.localeCompare(b, "zh")),
+      hasEmpty: set.has(""),
+    };
+  }
+
   function rowsOf() {
     const q = query.trim().toLowerCase();
-    const list = dishes
+    let list = dishes
       .slice()
       .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0) || (a.title || "").localeCompare(b.title || "", "zh"));
+    if (catFilter === "__none__") list = list.filter((d) => !(d.category || "").trim());
+    else if (catFilter) list = list.filter((d) => (d.category || "").trim() === catFilter);
     return q
       ? list.filter(
           (d) =>
@@ -153,19 +164,50 @@
       : list;
   }
 
-  function renderList() {
-    const rows = rowsOf();
-    const body = rows.length
-      ? rows
-          .map(
-            (d, i) => `<button class="row" data-id="${d.id}" style="animation-delay:${Math.min(i, 12) * 12}ms">
+  function rowsHtml(rows) {
+    if (!rows.length) {
+      const msg = query ? "没有找到" : catFilter ? "这个分类下还没有菜谱" : "还没有菜谱";
+      return `<div class="empty">${msg}</div>`;
+    }
+    return rows
+      .map(
+        (d, i) => `<button class="row" data-id="${d.id}" style="animation-delay:${Math.min(i, 12) * 12}ms">
           <span class="num">${String(i + 1).padStart(2, "0")}</span>
           <span class="t">${esc(d.title)}</span>
           <span class="mini">${d.steps.length} 步</span>
         </button>`
-          )
-          .join("")
-      : `<div class="empty">${query ? "没有找到" : "还没有菜谱，点右上角 + 添加"}</div>`;
+      )
+      .join("");
+  }
+
+  function bindRows(box) {
+    box.querySelectorAll(".row").forEach((b) =>
+      b.addEventListener("click", () => {
+        current = b.dataset.id;
+        view = "detail";
+        render();
+      })
+    );
+  }
+
+  function paintRows() {
+    const box = app.querySelector(".list");
+    box.innerHTML = rowsHtml(rowsOf());
+    bindRows(box);
+  }
+
+  function catsHtml() {
+    const { named, hasEmpty } = catsOf();
+    if (!named.length && !hasEmpty) return "";
+    const item = (val, label) =>
+      `<button class="cat${catFilter === val ? " on" : ""}" data-cat="${esc(val)}">${esc(label)}</button>`;
+    return `<div class="cats">${item("", "全部")}${named.map((c) => item(c, c)).join("")}${
+      hasEmpty ? item("__none__", "未分类") : ""
+    }</div>`;
+  }
+
+  function renderList() {
+    const body = rowsHtml(rowsOf());
 
     app.innerHTML = `
       <div class="top">
@@ -182,14 +224,18 @@
           </div>
         </div>
         <div class="find ${findOpen ? "open" : ""}"><div><input id="q" placeholder="搜索菜名、材料" value="${esc(query)}"></div></div>
+        ${catsHtml()}
       </div>
       <div class="list">${body}</div>`;
 
-    app.querySelectorAll(".row").forEach((b) =>
+    bindRows(app.querySelector(".list"));
+    app.querySelectorAll(".cat").forEach((b) =>
       b.addEventListener("click", () => {
-        current = b.dataset.id;
-        view = "detail";
-        render();
+        if (catFilter === b.dataset.cat) return;
+        catFilter = b.dataset.cat;
+        app.querySelectorAll(".cat").forEach((x) => x.classList.toggle("on", x === b));
+        paintRows();
+        window.scrollTo({ top: 0, behavior: "smooth" });
       })
     );
     app.querySelector('[data-act="find"]').addEventListener("click", () => {
@@ -209,26 +255,7 @@
     const q = app.querySelector("#q");
     q?.addEventListener("input", () => {
       query = q.value;
-      const box = app.querySelector(".list");
-      const rows = rowsOf();
-      box.innerHTML = rows.length
-        ? rows
-            .map(
-              (d, i) => `<button class="row" data-id="${d.id}">
-            <span class="num">${String(i + 1).padStart(2, "0")}</span>
-            <span class="t">${esc(d.title)}</span>
-            <span class="mini">${d.steps.length} 步</span>
-          </button>`
-            )
-            .join("")
-        : `<div class="empty">没有找到</div>`;
-      box.querySelectorAll(".row").forEach((b) =>
-        b.addEventListener("click", () => {
-          current = b.dataset.id;
-          view = "detail";
-          render();
-        })
-      );
+      paintRows();
     });
   }
 
