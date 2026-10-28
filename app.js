@@ -585,5 +585,12 @@
   if (WIDE.addEventListener) WIDE.addEventListener("change", () => render());
   else if (WIDE.addListener) WIDE.addListener(() => render());
 
+  // ---------- 禁掉双指缩放 ----------
+  // CSS 的 touch-action 在 iOS 主屏幕模式下不总是生效，这里补一道 gesture 事件拦截。
+  // 只拦捏合，不碰 tap，避免影响按钮点击。
+  ["gesturestart", "gesturechange", "gestureend"].forEach((t) =>
+    document.addEventListener(t, (e) => e.preventDefault(), { passive: false })
+  );
+
   load();
 })();

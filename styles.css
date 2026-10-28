@@ -10,6 +10,12 @@
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; min-height: 100%; }
+/* 禁掉双击放大与双指捏合，保留滚动；同时阻止横屏时 iOS 自动放大字号 */
+html {
+  touch-action: pan-x pan-y;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
 body {
   background: #fff;
   color: var(--ink);
@@ -62,7 +68,7 @@ input:focus, textarea:focus { outline: none; }
 .find > div { overflow: hidden; }
 .find input {
   width: 100%; background: none; border: 0; border-bottom: 1px solid var(--line);
-  padding: 4px 0 10px; font-size: 15px;
+  padding: 4px 0 10px; font-size: 16px; /* 16px 是 iOS 不自动放大输入框的下限 */
 }
 .find input::placeholder { color: #c4c4ca; }
 
