@@ -2,10 +2,10 @@
 
 一个极简的个人菜谱本。白色主题，一行一行地列菜名，点开就是材料与步骤。
 
-- 托管：GitHub Pages（纯静态，无构建、无外部依赖）
-- 数据：Supabase 云端数据库，手机浏览器打开即用，可加到主屏幕
-- 录入：不在手机上打字。菜谱由 AI 写进 `dishes.json`，一条命令上传
-- 权限：**前端只读，写入只在你电脑上做**。网页源码被人拿到也改不了菜谱
+- 托管：任意静态托管（GitHub Pages / EdgeOne Pages / 自有服务器）
+- 数据：**双源，可切换，默认本地**。本地读 `dishes.json`，云端读 Supabase
+- 录入：不在手机上打字。菜谱由 AI 写好，本地源直接提交，云端源跑一条命令上传
+- 权限：网页端两种源都**只读**，没有编辑入口
 
 ## 现在能做什么
 
@@ -14,8 +14,9 @@
 | 看全部菜谱 | 打开首页，按顺序一行一条 |
 | 看某道菜 | 点那一行 |
 | 搜索 | 点右上角放大镜，按菜名 / 材料 / 分类查 |
-| 新增 / 修改菜谱 | 不在网页上做，见「三、上传菜谱」 |
-| 备份 | 设置页 → 导出备份（JSON） |
+| 按分类筛选 | 标题下方那排标签，和搜索可叠加 |
+| 切换数据源 | 设置页 →「数据来源」两段开关 |
+| 返回 | 手机左边缘右滑、系统返回键、桌面点「菜谱」 |
 
 ## 目录
 
@@ -23,70 +24,73 @@
 menu/
 ├── index.html              # 页面骨架
 ├── styles.css              # 全部样式
-├── app.js                  # 全部逻辑（列表 / 详情 / 搜索 / 读取云端）
-├── config.js               # Supabase 地址与 anon key —— 只有这里要改
-├── supabase-schema.sql     # 建表 SQL + 权限
-├── dishes.json             # 你的菜谱，AI 写这个文件
+├── app.js                  # 全部逻辑（双源加载 / 列表 / 详情 / 搜索 / 手势）
+├── config.js               # 数据源开关 + Supabase 地址与 publishable key
+├── dishes.json             # 本地菜谱数据（本地源读它）
 ├── dishes.example.json     # 格式示例，可删
-├── tools/push-dishes.js    # 把 dishes.json 上传到 Supabase
+├── supabase-schema.sql     # 云端建表 SQL + 只读权限（只有云端源需要）
+├── tools/push-dishes.js    # 把 dishes.json 上传到 Supabase（只有云端源需要）
 ├── manifest.webmanifest    # 加到主屏幕用的配置
 ├── sw.js                   # 离线缓存
 ├── icon.svg
 └── design/                 # 样式比样的四份样张，可删
 ```
 
-## 一、建数据库（只做一次）
+## 一、两种数据源
 
-1. 打开 https://supabase.com ，登录并新建一个 Free 项目。
-2. 左侧 **SQL Editor** → New query → 把 `supabase-schema.sql` 整段粘进去 → Run。
-3. 左侧 **Project Settings → API Keys**，拿到三个值：
-   - **Project URL**，形如 `https://xxxx.supabase.co`
-   - **anon public**（`sb_publishable_...`）—— 给网页用，可以公开
-   - **secret**（`sb_secret_...`）—— 给你电脑上传用，**绝不写进 config.js，绝不提交到 GitHub**
+| | 本地文件（默认） | 云端数据库 |
+|---|---|---|
+| 数据在 | 仓库里的 `dishes.json` | Supabase `dishes` 表 |
+| 打开时的请求 | 只拉本站一个 json，**不出境** | 多一次到 Supabase 的请求 |
+| 断网 | 有 service worker，能看 | 看不了 |
+| 改菜谱 | 改 json → 提交 → 重新发布 | 跑脚本上传，网页不用重新发布 |
+| 多设备 | 跟着网页版本走 | 各端实时一致 |
+| 密钥 | 无 | publishable key（可公开） |
+| 适合 | 日常看菜谱 | 想随时改、又不想动代码 |
 
-4. 打开 `config.js`，只填 URL 和 anon key：
+**默认走本地**：`config.js` 里 `DATA_SOURCE: "local"`。
 
-```js
-window.APP_CONFIG = {
-  SUPABASE_URL: "https://xxxx.supabase.co",
-  SUPABASE_ANON_KEY: "sb_publishable_...",
-};
-```
+切换有两种方式：
 
-5. 把上传用的两个值写进系统环境变量（Windows，只需一次，重开终端生效）：
+1. **手机上临时切**——设置页「数据来源」点「云端数据库」，选择存在 localStorage，下次打开还记得。
+2. **改默认值**——把 `config.js` 的 `DATA_SOURCE` 改成 `"cloud"`，所有设备默认走云端。
 
-```bat
-setx SUPABASE_URL "https://xxxx.supabase.co"
-setx SUPABASE_SECRET_KEY "sb_secret_..."
-```
+云端没配（`SUPABASE_URL` 或 key 为空）时，「云端数据库」按钮是灰的，点不动。
 
-## 二、托管到 GitHub Pages
+## 二、本地预览
 
 ```bash
 cd menu
-git add .
-git commit -m "init"
-# 先在 GitHub 网页建一个空仓库 menu，然后：
-git remote add origin https://github.com/<你的用户名>/menu.git
-git push -u origin main
+python -m http.server 8766
 ```
 
-建好仓库后：**Settings → Pages → Source 选 Deploy from a branch → main / (root) → Save**。
-一两分钟后访问 `https://<你的用户名>.github.io/menu/`。
+打开 `http://127.0.0.1:8766/`。直接双击 `index.html` 用 `file://` 打开不行——浏览器会拦住 `fetch` 本地 json。
 
-> 手机上打开这个网址，Safari 点「分享 → 添加到主屏幕」，就是一个独立图标的全屏 App。
-> 如果页面空白，先确认 Pages 已部署完成（仓库首页右侧会有绿色链接）。
+## 三、部署
 
-## 三、上传菜谱
+纯静态，把整个目录扔上去就行，没有构建步骤。
 
-最省事的方式：直接对我说「把这几道菜加进菜单」，附上菜名或做法。我会按格式写好 `dishes.json`、检查、上传。
+**GitHub Pages**：推到仓库后 Settings → Pages → Deploy from a branch → main / (root)。
 
-自己动手也可以：
+**EdgeOne Pages**（国内访问更稳）：控制台 → Pages → 导入 Git 仓库 → 框架选「静态」→ 构建命令留空、输出目录填 `/`。
+
+## 四、加菜
+
+**本地源**：改 `dishes.json` → 提交 → 重新发布。就这样，没有别的步骤。
+
+**云端源**：
 
 ```bash
 cd menu
 node tools/push-dishes.js --check      # 只检查格式，不上传
-node tools/push-dishes.js              # 上传
+node tools/push-dishes.js              # 上传（按 title upsert）
+```
+
+需要先设两个环境变量（只需一次）：
+
+```bat
+setx SUPABASE_URL "https://xxxx.supabase.co"
+setx SUPABASE_SECRET_KEY "sb_secret_..."
 ```
 
 `dishes.json` 格式（最外层数组，一道菜一个对象）：
@@ -104,32 +108,32 @@ node tools/push-dishes.js              # 上传
 
 规则：
 
-- `title` 唯一。**同名重传会覆盖**——所以改菜谱就是重新上传同名那条，不用先删。
+- `title` 必填且唯一。本地按数组顺序展示；云端同名重传会覆盖。
 - `ingredients` 一项一行，数量写在名称后面，如 `"番茄 2 个"`。
-- `steps` 一项一步，不用写序号，页面自己编。AI 若写了「1.」开头也会被自动去掉。
-- `category` 可空。
-- 中文键名（`菜名` / `材料` / `步骤`）也认，但建议统一英文键。
+- `steps` 一项一步，不用写序号，页面自己编。
+- `category` 可空；分类标签由数据自动汇总，不用单独维护。
+- 改完刷新页面即可，`sw.js` 是网络优先，不会吃到旧缓存。
 
-脚本会先打印清单再上传，出错时给中文提示，不会半途写坏数据。
+## 五、云端建库（只有要用云端源才做）
+
+1. https://supabase.com 新建 Free 项目。
+2. 左侧 **SQL Editor** → New query → 把 `supabase-schema.sql` 整段粘进去 → Run。
+3. 左侧 **Settings → API Keys** 拿三个值：Project URL、Publishable key（`sb_publishable_...`）、Secret key（`sb_secret_...`）。
+4. URL 和 publishable key 填进 `config.js`；secret key 只进系统环境变量，**不进仓库、不进前端**。
 
 ## 数据模型
 
-一张表，五个业务字段，故意做到最少：
-
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| `title` | text | 菜名，唯一 |
-| `category` | text | 分类，可空 |
-| `ingredients` | text[] | 材料，一项一个字符串，如 `番茄 2 个` |
-| `steps` | text[] | 步骤，一项一步，不带序号 |
-| `sort` | integer | 排序，小的在前 |
+| `title` | string | 菜名，唯一 |
+| `category` | string | 分类，可空 |
+| `ingredients` | string[] | 材料，一项一个字符串 |
+| `steps` | string[] | 步骤，一项一步，不带序号 |
+| `sort` | number | 可选，排序用；本地不写就按数组顺序 |
 
 ## 关于安全
 
-读写分离：
-
-- 网页里只有 anon key；数据库对 anon / authenticated 只 `grant select`，RLS 也没有写策略。任何人拿到网页源码都只能读。
-- 写入用 secret key，它只在你电脑的系统环境变量里，不经过网页、不进仓库。
-- 为什么不在网页里做编辑：任何能写数据库的密钥，只要放在前端就必然随网页公开，等同于匿名可写。所以写入只能离开浏览器。
-
-如果哪天想在手机上随时改，只能退回「anon 可写」——安全性等同于「网址不公开」，不推荐。
+- 网页端两种源都只读，源码公开也改不了菜谱。
+- 云端写入用 secret key，只在本机系统环境变量里，不经过网页、不进仓库。
+- 本地源没有密钥，也不向任何第三方发请求。
+- 为什么不在网页里做编辑：任何能写数据库的密钥，只要放在前端就必然随网页公开，等同于匿名可写。
