@@ -1,6 +1,7 @@
 // ============================================================
 // 菜谱 · 单文件逻辑
 // 存储：localStorage 缓存 + Supabase（配置了才启用）
+// 布局：<960px 单列全屏；>=960px 左列表 + 右详情
 // ============================================================
 (() => {
   const CFG = window.APP_CONFIG || {};
@@ -17,6 +18,7 @@
   const LS = "menu.dishes.v1";
 
   const app = document.getElementById("app");
+  const WIDE = window.matchMedia("(min-width: 960px)");
 
   // ---------- 状态 ----------
   let dishes = [];
@@ -25,6 +27,7 @@
   let query = "";
   let findOpen = false;
   let catFilter = "";     // "" = 全部；"__none__" = 未分类；其余为分类名
+  let depth = 0;          // 浏览器历史层级，0 为列表根
 
   // ---------- 工具 ----------
   const esc = (s) =>
@@ -56,6 +59,55 @@
       localStorage.setItem(LS, JSON.stringify(dishes));
     } catch {}
   }
+
+  // ---------- 导航（history 驱动，返回键 / 右滑都走这里） ----------
+  let HIST_OK = true;
+  try {
+    history.replaceState({ v: "list", id: null, d: 0 }, "");
+  } catch {
+    HIST_OK = false; // file:// 等场景降级为纯内存导航
+  }
+
+  function pushView(next, id = null) {
+    view = next;
+    current = id;
+    if (HIST_OK) {
+      depth += 1;
+      history.pushState({ v: next, id, d: depth }, "");
+    }
+    render();
+  }
+
+  function back() {
+    if (HIST_OK && depth > 0) {
+      history.back();
+      return;
+    }
+    view = "list";
+    current = null;
+    render();
+  }
+
+  // 回到列表根：一次弹掉所有层，不留下可回退的中间态
+  function home() {
+    view = "list";
+    current = null;
+    render();
+    if (HIST_OK && depth > 0) {
+      const n = depth;
+      depth = 0;
+      history.go(-n);
+    }
+  }
+
+  function applyState(st) {
+    depth = st && typeof st.d === "number" ? st.d : 0;
+    view = (st && st.v) || "list";
+    current = (st && st.id) || null;
+    render();
+  }
+
+  window.addEventListener("popstate", () => applyState(history.state));
 
   // ---------- 云端（只读） ----------
   // 前端只用 anon key，数据库中只授予 SELECT。
@@ -121,9 +173,7 @@
       toast("已添加（仅本机）");
     }
     writeLocal();
-    view = "list";
-    current = null;
-    render();
+    home();
   }
 
   function deleteDish(id) {
@@ -133,12 +183,10 @@
     dishes = dishes.filter((x) => x.id !== id);
     writeLocal();
     toast("已删除");
-    view = "list";
-    current = null;
-    render();
+    home();
   }
 
-  // ---------- 渲染：列表 ----------
+  // ---------- 列表 ----------
   function catsOf() {
     const set = new Set(dishes.map((d) => (d.category || "").trim()));
     return {
@@ -171,7 +219,7 @@
     }
     return rows
       .map(
-        (d, i) => `<button class="row" data-id="${d.id}" style="animation-delay:${Math.min(i, 12) * 12}ms">
+        (d, i) => `<button class="row${d.id === current ? " on" : ""}" data-id="${d.id}" style="animation-delay:${Math.min(i, 12) * 12}ms">
           <span class="num">${String(i + 1).padStart(2, "0")}</span>
           <span class="t">${esc(d.title)}</span>
           <span class="mini">${d.steps.length} 步</span>
@@ -182,16 +230,12 @@
 
   function bindRows(box) {
     box.querySelectorAll(".row").forEach((b) =>
-      b.addEventListener("click", () => {
-        current = b.dataset.id;
-        view = "detail";
-        render();
-      })
+      b.addEventListener("click", () => openDish(b.dataset.id))
     );
   }
 
-  function paintRows() {
-    const box = app.querySelector(".list");
+  function paintRows(root) {
+    const box = root.querySelector(".list");
     box.innerHTML = rowsHtml(rowsOf());
     bindRows(box);
   }
@@ -206,10 +250,8 @@
     }</div>`;
   }
 
-  function renderList() {
-    const body = rowsHtml(rowsOf());
-
-    app.innerHTML = `
+  function listHtml() {
+    return `
       <div class="top">
         <div class="top-inner">
           <h1>MENU</h1>
@@ -226,47 +268,54 @@
         <div class="find ${findOpen ? "open" : ""}"><div><input id="q" placeholder="搜索菜名、材料" value="${esc(query)}"></div></div>
         ${catsHtml()}
       </div>
-      <div class="list">${body}</div>`;
+      <div class="list">${rowsHtml(rowsOf())}</div>`;
+  }
 
-    bindRows(app.querySelector(".list"));
-    app.querySelectorAll(".cat").forEach((b) =>
+  function bindList(root) {
+    bindRows(root.querySelector(".list"));
+    root.querySelectorAll(".cat").forEach((b) =>
       b.addEventListener("click", () => {
         if (catFilter === b.dataset.cat) return;
         catFilter = b.dataset.cat;
-        app.querySelectorAll(".cat").forEach((x) => x.classList.toggle("on", x === b));
-        paintRows();
+        root.querySelectorAll(".cat").forEach((x) => x.classList.toggle("on", x === b));
+        paintRows(root);
         window.scrollTo({ top: 0, behavior: "smooth" });
       })
     );
-    app.querySelector('[data-act="find"]').addEventListener("click", () => {
+    root.querySelector('[data-act="find"]').addEventListener("click", () => {
       findOpen = !findOpen;
       render();
       if (findOpen) app.querySelector("#q")?.focus();
     });
-    app.querySelector('[data-act="add"]')?.addEventListener("click", () => {
-      current = null;
-      view = "edit";
-      render();
-    });
-    app.querySelector('[data-act="settings"]').addEventListener("click", () => {
-      view = "settings";
-      render();
-    });
-    const q = app.querySelector("#q");
+    root.querySelector('[data-act="add"]')?.addEventListener("click", () => pushView("edit"));
+    root.querySelector('[data-act="settings"]').addEventListener("click", () => pushView("settings"));
+    const q = root.querySelector("#q");
     q?.addEventListener("input", () => {
       query = q.value;
-      paintRows();
+      paintRows(root);
     });
   }
 
-  // ---------- 渲染：详情 ----------
-  function renderDetail() {
-    const d = dishes.find((x) => x.id === current);
-    if (!d) {
-      view = "list";
-      return renderList();
+  // 点菜：宽屏已在详情里就直接换右边，不再压历史
+  function openDish(id) {
+    if (WIDE.matches && view === "detail") {
+      current = id;
+      if (HIST_OK) history.replaceState({ v: "detail", id, d: depth }, "");
+      const pane = app.querySelector(".pane");
+      if (pane) {
+        pane.innerHTML = detailHtml(dishes.find((x) => x.id === id));
+        bindDetail(pane);
+        app.querySelectorAll(".row").forEach((r) => r.classList.toggle("on", r.dataset.id === id));
+        return;
+      }
     }
-    app.innerHTML = `
+    pushView("detail", id);
+  }
+
+  // ---------- 详情 ----------
+  function detailHtml(d) {
+    if (!d) return "";
+    return `
       <div class="detail">
         <div class="bar">
           <button class="back" data-act="back"><span class="chev">‹</span>菜谱</button>
@@ -285,19 +334,18 @@
           <ol class="steps">${d.steps.map((s) => `<li>${esc(s)}</li>`).join("") || '<li style="color:#b9b9bf">未填写</li>'}</ol>
         </div>
       </div>`;
-    app.querySelector('[data-act="back"]').addEventListener("click", () => {
-      view = "list";
-      current = null;
-      render();
-    });
-    app.querySelector('[data-act="edit"]')?.addEventListener("click", () => {
-      view = "edit";
-      render();
-    });
-    window.scrollTo(0, 0);
   }
 
-  // ---------- 渲染：编辑 ----------
+  function emptyDetailHtml() {
+    return `<div class="detail blank"><div class="ph">从左边选一道菜</div></div>`;
+  }
+
+  function bindDetail(root) {
+    root.querySelector('[data-act="back"]')?.addEventListener("click", back);
+    root.querySelector('[data-act="edit"]')?.addEventListener("click", () => pushView("edit", current));
+  }
+
+  // ---------- 编辑 ----------
   function renderEdit() {
     const d = current ? dishes.find((x) => x.id === current) : null;
     app.innerHTML = `
@@ -351,15 +399,12 @@
     };
 
     app.querySelectorAll('[data-act="save"]').forEach((b) => b.addEventListener("click", doSave));
-    app.querySelector('[data-act="cancel"]').addEventListener("click", () => {
-      view = d ? "detail" : "list";
-      render();
-    });
+    app.querySelector('[data-act="cancel"]').addEventListener("click", back);
     app.querySelector('[data-act="del"]')?.addEventListener("click", () => deleteDish(d.id));
     if (!d) setTimeout(() => app.querySelector("#f-title")?.focus(), 60);
   }
 
-  // ---------- 渲染：设置 ----------
+  // ---------- 设置 ----------
   function renderSettings() {
     const n = dishes.length;
     const localN = dishes.filter((d) => !d.remoteId).length;
@@ -382,10 +427,7 @@
         ${localN ? '<button class="ghost" data-act="reset" style="color:#b4443a">清除本机临时数据</button>' : ""}
       </div>`;
 
-    app.querySelector('[data-act="back"]').addEventListener("click", () => {
-      view = "list";
-      render();
-    });
+    app.querySelector('[data-act="back"]').addEventListener("click", back);
     app.querySelector('[data-act="export"]').addEventListener("click", () => {
       const blob = new Blob([JSON.stringify(dishes, null, 2)], { type: "application/json" });
       const a = document.createElement("a");
@@ -434,13 +476,114 @@
     });
   }
 
-  // ---------- 路由 ----------
+  // ---------- 渲染 ----------
   function render() {
-    if (view === "detail") renderDetail();
-    else if (view === "edit") renderEdit();
-    else if (view === "settings") renderSettings();
-    else renderList();
+    if (view === "detail" && !dishes.some((d) => d.id === current)) {
+      view = "list";
+      current = null;
+    }
+    if (WIDE.matches) renderWide();
+    else renderNarrow();
   }
+
+  function renderNarrow() {
+    if (view === "detail") {
+      app.innerHTML = `<div class="shell">${detailHtml(dishes.find((d) => d.id === current))}</div>`;
+      bindDetail(app);
+      window.scrollTo(0, 0);
+      return;
+    }
+    if (view === "edit") return renderEdit();
+    if (view === "settings") return renderSettings();
+    app.innerHTML = `<div class="shell">${listHtml()}</div>`;
+    bindList(app);
+  }
+
+  function renderWide() {
+    if (view === "edit") return renderEdit();
+    if (view === "settings") return renderSettings();
+    const d = view === "detail" ? dishes.find((x) => x.id === current) : null;
+    app.innerHTML = `<div class="shell wide">
+      <aside class="rail">${listHtml()}</aside>
+      <main class="pane">${d ? detailHtml(d) : emptyDetailHtml()}</main>
+    </div>`;
+    bindList(app.querySelector(".rail"));
+    if (d) bindDetail(app.querySelector(".pane"));
+  }
+
+  // ---------- 手势：右滑返回 ----------
+  // iOS 添加到主屏幕后没有系统级返回手势，必须自己接。
+  const EDGE = 52;     // 从左边缘多少像素内起手才算
+  const TRIGGER = 76;  // 右滑超过多少像素触发返回
+  let sx = 0, sy = 0, dragging = false, locked = false;
+
+  const resetDrag = () => {
+    dragging = false;
+    app.style.transition = "transform .22s cubic-bezier(.2,.7,.3,1), opacity .22s";
+    app.style.transform = "";
+    app.style.opacity = "";
+  };
+
+  document.addEventListener(
+    "touchstart",
+    (e) => {
+      dragging = false;
+      locked = false;
+      if (WIDE.matches || depth === 0 || view === "list") return;
+      if (e.touches.length !== 1) return;
+      const t = e.touches[0];
+      if (t.clientX > EDGE) return;
+      sx = t.clientX;
+      sy = t.clientY;
+      dragging = true;
+      app.style.transition = "none";
+    },
+    { passive: true }
+  );
+
+  document.addEventListener(
+    "touchmove",
+    (e) => {
+      if (!dragging) return;
+      const t = e.touches[0];
+      const dx = t.clientX - sx;
+      const dy = t.clientY - sy;
+      if (!locked) {
+        if (Math.abs(dy) > Math.abs(dx) + 4) {
+          resetDrag(); // 纵向滚动优先，别抢
+          return;
+        }
+        if (Math.abs(dx) > 6) locked = true;
+      }
+      if (dx <= 0) {
+        app.style.transform = "";
+        return;
+      }
+      app.style.transform = `translateX(${Math.min(dx, 340)}px)`;
+      app.style.opacity = String(Math.max(0.55, 1 - dx / 820));
+    },
+    { passive: true }
+  );
+
+  document.addEventListener(
+    "touchend",
+    (e) => {
+      if (!dragging) return;
+      dragging = false;
+      const dx = e.changedTouches[0].clientX - sx;
+      resetDrag();
+      if (dx > TRIGGER) back();
+    },
+    { passive: true }
+  );
+
+  document.addEventListener("touchcancel", () => {
+    if (dragging) resetDrag();
+  }, { passive: true });
+
+  // 断点变化时重排：手机竖屏切到平板横屏不该还停在单列
+  if (WIDE.addEventListener) WIDE.addEventListener("change", () => render());
+  else if (WIDE.addListener) WIDE.addListener(() => render());
 
   load();
 })();
